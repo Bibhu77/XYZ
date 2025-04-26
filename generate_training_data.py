@@ -3,7 +3,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import random
 
-# Odisha cities with approximate coordinates
+# Odisha locations with coordinates
 ODISHA_LOCATIONS = {
     'Bhubaneswar': (20.2961, 85.8245),
     'Cuttack': (20.4625, 85.8828),
@@ -27,89 +27,77 @@ ODISHA_LOCATIONS = {
     'Khordha': (20.1883, 85.6214)
 }
 
-BLOOD_TYPES = ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+']
-PHONE_PREFIX = '+91'
-
-def random_phone():
-    """Generate a random 10-digit phone number."""
-    return PHONE_PREFIX + ''.join([str(random.randint(0, 9)) for _ in range(10)])
-
-def random_date(start_year=2020, end_year=2025):
-    """Generate a random date between start_year and end_year."""
-    start = datetime(start_year, 1, 1)
-    end = datetime(end_year, 1, 1)
-    delta = end - start
-    random_days = random.randint(0, delta.days)
-    return (start + timedelta(days=random_days)).strftime('%Y-%m-%d')
-
 def generate_donors(n=100):
-    """Generate donor data."""
-    donors = []
-    for i in range(1, n + 1):
+    """Generate synthetic donor data."""
+    blood_types = ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+']
+    data = []
+    for i in range(n):
         location = random.choice(list(ODISHA_LOCATIONS.keys()))
         lat, lon = ODISHA_LOCATIONS[location]
-        # Add small random offset to coordinates
+        # Add slight variation to coordinates
         lat += random.uniform(-0.05, 0.05)
         lon += random.uniform(-0.05, 0.05)
-        donors.append({
-            'id': i,
-            'blood_type': random.choice(BLOOD_TYPES),
+        last_donation = datetime.now() - timedelta(days=random.randint(0, 365))
+        data.append({
+            'id': i + 1,
+            'blood_type': random.choice(blood_types),
             'latitude': lat,
             'longitude': lon,
-            'last_donation': random_date(),
-            'phone': random_phone()
+            'last_donation': last_donation.strftime('%Y-%m-%d'),
+            'phone': f"+91{random.randint(9000000000, 9999999999)}"
         })
-    return pd.DataFrame(donors)
+    return pd.DataFrame(data)
 
 def generate_recipients(n=50):
-    """Generate recipient data."""
-    recipients = []
-    for i in range(1, n + 1):
+    """Generate synthetic recipient data."""
+    blood_types = ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+']
+    data = []
+    for i in range(n):
         location = random.choice(list(ODISHA_LOCATIONS.keys()))
         lat, lon = ODISHA_LOCATIONS[location]
         lat += random.uniform(-0.05, 0.05)
         lon += random.uniform(-0.05, 0.05)
-        recipients.append({
-            'id': i,
-            'blood_type': random.choice(BLOOD_TYPES),
+        data.append({
+            'id': i + 1,
+            'blood_type': random.choice(blood_types),
             'latitude': lat,
             'longitude': lon,
             'urgency': random.randint(1, 10)
         })
-    return pd.DataFrame(recipients)
+    return pd.DataFrame(data)
 
 def generate_hospitals(n=20):
-    """Generate hospital data."""
-    hospitals = []
-    for i in range(1, n + 1):
-        location = random.choice(list(ODISHA_LOCATIONS.keys()))
+    """Generate synthetic hospital data with all blood types and low stock."""
+    blood_types = ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+']
+    data = []
+    hospital_id = 1
+    for location in ODISHA_LOCATIONS.keys():
         lat, lon = ODISHA_LOCATIONS[location]
-        lat += random.uniform(-0.05, 0.05)
-        lon += random.uniform(-0.05, 0.05)
-        hospitals.append({
-            'id': i,
-            'name': f"{location} Hospital",
-            'latitude': lat,
-            'longitude': lon,
-            'blood_type': random.choice(BLOOD_TYPES),
-            'stock': random.randint(0, 10)
-        })
-    return pd.DataFrame(hospitals)
+        for blood_type in blood_types:
+            # Ensure at least some hospitals have low stock
+            stock = random.randint(0, 3) if random.random() < 0.4 else random.randint(4, 10)
+            data.append({
+                'id': hospital_id,
+                'name': f"{location} Hospital {blood_type}",
+                'latitude': lat + random.uniform(-0.02, 0.02),
+                'longitude': lon + random.uniform(-0.02, 0.02),
+                'blood_type': blood_type,
+                'stock': stock
+            })
+            hospital_id += 1
+    return pd.DataFrame(data)
 
 def main():
-    """Generate and save datasets."""
+    """Generate and save all datasets."""
     donors = generate_donors(100)
     recipients = generate_recipients(50)
-    hospitals = generate_hospitals(20)
+    hospitals = generate_hospitals()
     
     donors.to_csv('donors.csv', index=False)
     recipients.to_csv('recipients.csv', index=False)
     hospitals.to_csv('hospitals.csv', index=False)
     
-    print("Generated datasets:")
-    print(f"- donors.csv: {len(donors)} records")
-    print(f"- recipients.csv: {len(recipients)} records")
-    print(f"- hospitals.csv: {len(hospitals)} records")
+    print(f"Generated: {len(donors)} donors, {len(recipients)} recipients, {len(hospitals)} hospitals")
 
 if __name__ == "__main__":
     main()
