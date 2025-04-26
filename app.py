@@ -220,6 +220,22 @@ def match():
             'message': f"Server error: {str(e)}"
         }), 500
 
+@app.route('/hospitals', methods=['GET'])
+def get_hospitals():
+    """API endpoint to return hospital data."""
+    try:
+        hospital_data = hospitals.to_dict(orient='records')
+        return jsonify({
+            'status': 'success',
+            'hospitals': hospital_data
+        })
+    except Exception as e:
+        logging.error(f"Error in /hospitals endpoint: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f"Server error: {str(e)}"
+        }), 500
+
 @app.route('/reveal_phone', methods=['POST'])
 def reveal_phone():
     """Reveal the full phone number using a one-time token."""
