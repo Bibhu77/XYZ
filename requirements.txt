@@ -1,6 +1,0 @@
-flask==2.3.2
-flask-cors==4.0.1
-pandas==2.2.2
-haversine==2.8.1
-twilio==9.2.3
-gunicorn==22.0.0
