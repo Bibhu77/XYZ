@@ -20,6 +20,18 @@ compatibility = {
     'AB+': ['AB+']
 }
 
+# Donor compatibility (which blood types a donor can supply)
+donor_compatibility = {
+    'O-': ['O-'],
+    'O+': ['O-', 'O+'],
+    'A-': ['O-', 'A-'],
+    'A+': ['O-', 'O+', 'A-', 'A+'],
+    'B-': ['O-', 'B-'],
+    'B+': ['O-', 'O+', 'B-', 'B+'],
+    'AB-': ['O-', 'A-', 'B-', 'AB-'],
+    'AB+': ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+']
+}
+
 # Load AI model and scaler
 try:
     model = joblib.load('donor_match_model.pkl')
@@ -65,15 +77,17 @@ def match_donor(recipient, donors, hospitals, max_distance=50):
     matches = []
     recipient_loc = (recipient['latitude'], recipient['longitude'])
     
-    # Find hospitals with low stock for the recipient's blood type
+    # Find hospitals with low stock for compatible blood types
+    compatible_blood_types = donor_compatibility.get(recipient['blood_type'], [recipient['blood_type']])
     low_stock_hospitals = hospitals[
-        (hospitals['blood_type'] == recipient['blood_type']) & 
+        (hospitals['blood_type'].isin(compatible_blood_types)) & 
         (hospitals['stock'] < 5)
     ]
+    logging.debug(f"Found {len(low_stock_hospitals)} low-stock hospitals for blood types: {compatible_blood_types}")
     
     for _, donor in donors.iterrows():
         # Validate donor data
-        if pd.isna(donor['latitude']) or pd.isna(donor['longitude']) or pd.isna(donor['blood_type']):
+        if pd.isna(donor['latitude']) or pd.isna(donor['longitude']) or pd.isna(donor['blood_type']) or pd.isna(donor['phone']):
             logging.warning(f"Skipping donor {donor['id']} due to missing data")
             continue
         
@@ -86,6 +100,12 @@ def match_donor(recipient, donors, hospitals, max_distance=50):
                 min_hospital_distance = float('inf')
                 if not low_stock_hospitals.empty:
                     for _, hospital in low_stock_hospitals.iterrows():
+                        hospital_loc = (hospital['latitude'], hospital['longitude'])
+                        hospital_distance = calculate_distance(donor_loc, hospital_loc)
+                        min_hospital_distance = min(min_hospital_distance, hospital_distance)
+                else:
+                    # Fallback: find the closest hospital (any blood type or stock)
+                    for _, hospital in hospitals.iterrows():
                         hospital_loc = (hospital['latitude'], hospital['longitude'])
                         hospital_distance = calculate_distance(donor_loc, hospital_loc)
                         min_hospital_distance = min(min_hospital_distance, hospital_distance)
@@ -113,6 +133,7 @@ def match_donor(recipient, donors, hospitals, max_distance=50):
                 else:
                     try:
                         features_array = np.array([features])
+                        # Scale distance-based features (indices 1 and 2)
                         features_array[:, [1, 2]] = scaler.transform(features_array[:, [1, 2]])
                         match_quality = model.predict(features_array)[0]
                         if np.isnan(match_quality) or np.isinf(match_quality):
@@ -130,7 +151,8 @@ def match_donor(recipient, donors, hospitals, max_distance=50):
                     'donor_latitude': donor['latitude'],
                     'donor_longitude': donor['longitude'],
                     'hospital_distance': min_hospital_distance,
-                    'match_quality': float(max(0, min(match_quality, 1)))  # Clamp between 0 and 1
+                    'match_quality': float(max(0, min(match_quality, 1))),
+                    'phone': str(donor['phone'])  # Ensure phone is string
                 })
     
     # Sort matches by match quality
@@ -149,8 +171,8 @@ def main():
     if matches:
         logging.info("Found matches:")
         for match in matches:
-            hospital_distance = match['hospital_distance'] if match['hospital_distance'] != float('inf') else 'No low-stock hospitals'
-            logging.info(f"Donor ID: {match['donor_id']}, Blood Type: {match['blood_type']}, Distance: {match['distance']:.2f} km, Hospital Distance: {hospital_distance}, Urgency: {match['urgency_score']}, Match Quality: {match['match_quality']:.4f}")
+            hospital_distance = match['hospital_distance'] if match['hospital_distance'] != float('inf') else 'No hospitals found'
+            logging.info(f"Donor ID: {match['donor_id']}, Blood Type: {match['blood_type']}, Distance: {match['distance']:.2f} km, Hospital Distance: {hospital_distance}, Urgency: {match['urgency_score']}, Match Quality: {match['match_quality']:.4f}, Phone: {match['phone']}")
     else:
         logging.info("No matches found.")
 
