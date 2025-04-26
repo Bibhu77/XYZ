@@ -27,13 +27,35 @@
         .btn { transition: background-color 0.3s ease, transform 0.2s ease; }
         .btn:hover { transform: scale(1.05); }
         .modal { transition: opacity 0.3s ease; }
-        .header { margin: 30px; }
-    </style>
+        .header { margin: 30px; } 
+        @keyframes fade-in {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+    animation: fade-in 1s ease-out forwards;
+}
+@keyframes bounce-slow {
+    0%, 100% { transform: scale(1.05) translateY(0); }
+    50% { transform: scale(1.1) translateY(-6px); }
+}
+.animate-bounce-slow {
+    animation: bounce-slow 2.5s infinite;
+}
+.drop-shadow-3xl {
+    filter: drop-shadow(3px 5px 8px rgba(0, 0, 0, 0.5));
+}
+.header{
+    border-top-left-radius: 10px;
+}    </style>
 </head>
 <body class="bg-red-50 min-h-screen flex flex-col font-sans">
-    <header class="w-full bg-white text-red-600 py-8 text-center shadow-lg header">
-        <h1 class="text-5xl font-extrabold tracking-tight">🩸Smart Blood Donation System</h1>
-        <p class="mt-3 text-xl font-light text-black">Connecting donors and recipients in Odisha with AI-powered precision</p>
+    <header class="w-full bg-gradient-to-r from-red-500 via-red-400 to-red-500 text-white py-10 text-center shadow-2xl rounded-b-3xl header animate-fade-in">
+        <h1 class="text-5xl font-extrabold tracking-tight drop-shadow-lg flex items-center justify-center gap-2">
+            <span class="text-5xl drop-shadow-3xl transform scale-105 animate-bounce-slow">🩸</span>
+            Smart Blood Donation System
+        </h1>
+        <p class="mt-5 text-xl font-light text-white/90">Connecting donors and recipients in Odisha with AI-powered precision</p>
     </header>
 
     <main class="w-full max-w-6xl mx-auto mt-10 px-6">
