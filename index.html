@@ -29,20 +29,18 @@
         .card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.15); }
         .btn { transition: background-color 0.3s ease, transform 0.2s ease; }
         .btn:hover { transform: scale(1.05); }
-    .header{
-        margin: 30px;
-        margin-right: 30px;
-    }
+        .header {
+            margin: 30px;
+            margin-right: 30px;
+        }
     </style>
 </head>
 <body class="bg-red-50 min-h-screen flex flex-col font-sans">
     <!-- Header -->
-   <!-- Header -->
-<header class="w-full bg-white text-red-600 py-8 text-center shadow-lg header">
-    <h1 class="text-5xl font-extrabold tracking-tight">🩸Smart Blood Donation System</h1>
-    <p class="mt-3 text-xl font-light text-black">Connecting donors and recipients in Odisha with AI-powered precision</p>
-</header>
-
+    <header class="w-full bg-white text-red-600 py-8 text-center shadow-lg header">
+        <h1 class="text-5xl font-extrabold tracking-tight">🩸Smart Blood Donation System</h1>
+        <p class="mt-3 text-xl font-light text-black">Connecting donors and recipients in Odisha with AI-powered precision</p>
+    </header>
 
     <!-- Main Content -->
     <main class="w-full max-w-6xl mx-auto mt-10 px-6">
@@ -86,7 +84,6 @@
                         <option value="Nayagarh">Nayagarh</option>
                         <option value="Malkangiri">Malkangiri</option>
                         <option value="Khordha">Khordha</option>
-                       
                     </select>
                 </div>
                 <div>
@@ -98,7 +95,6 @@
                         <span>Find Donors</span>
                         <div id="loading-spinner" class="loading-spinner ml-3"></div>
                     </button>
-                    
                 </div>
             </form>
         </section>
@@ -199,7 +195,9 @@
                     </div>
                 </div>
             </div>
-        </section> <!-- Results Section -->
+        </section>
+
+        <!-- Results Section -->
         <section id="results" class="mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></section>
     </main>
 
@@ -218,6 +216,30 @@
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap'
         }).addTo(map);
+
+        // Odisha locations
+        const odishaLocations = {
+            'Bhubaneswar': [20.2961, 85.8245],
+            'Cuttack': [20.4625, 85.8828],
+            'Rourkela': [22.2604, 84.8536],
+            'Berhampur': [19.3140, 84.7941],
+            'Sambalpur': [21.4669, 83.9757],
+            'Puri': [19.8134, 85.8315],
+            'Balasore': [21.4940, 86.9427],
+            'Bargarh': [21.3353, 83.6161],
+            'Angul': [20.8442, 85.1511],
+            'Jharsuguda': [21.8553, 84.0062],
+            'Dhenkanal': [20.6587, 85.5980],
+            'Kendrapara': [20.5002, 86.4166],
+            'Jagatsinghpur': [20.2548, 86.1706],
+            'Koraput': [18.8110, 82.7105],
+            'Rayagada': [19.1711, 83.4160],
+            'Bolangir': [20.7074, 83.4843],
+            'Sundargarh': [22.1167, 84.0333],
+            'Nayagarh': [20.1281, 85.0985],
+            'Malkangiri': [18.3650, 82.1367],
+            'Khordha': [20.1883, 85.6214]
+        };
 
         // Handle form submission
         document.getElementById('match-form').addEventListener('submit', async (e) => {
@@ -258,63 +280,64 @@
             resultsDiv.innerHTML = '';
 
             try {
-                const response = await fetch('http://localhost:5000/match', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ blood_type, location, urgency })
-                });
+                // Fetch matches and hospitals concurrently
+                const [matchResponse, hospitalResponse] = await Promise.all([
+                    fetch('http://localhost:5000/match', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ blood_type, location, urgency })
+                    }),
+                    fetch('http://localhost:5000/hospitals', {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    })
+                ]);
 
-                const data = await response.json();
+                const matchData = await matchResponse.json();
+                const hospitalData = await hospitalResponse.json();
 
-                if (!response.ok) {
-                    throw new Error(data.message || `HTTP error! Status: ${response.status}`);
+                if (!matchResponse.ok) {
+                    throw new Error(matchData.message || `HTTP error! Status: ${matchResponse.status}`);
+                }
+                if (!hospitalResponse.ok) {
+                    throw new Error(hospitalData.message || `HTTP error! Status: ${hospitalResponse.status}`);
                 }
 
-                // Clear previous markers
+                // Clear previous markers, preserving tile layer
                 map.eachLayer(layer => {
-                    if (layer instanceof L.Marker) map.removeLayer(layer);
+                    if (layer instanceof L.Marker) {
+                        map.removeLayer(layer);
+                    }
                 });
 
-                if (data.status === 'success' && data.matches.length > 0) {
-                    // Get recipient coordinates
-                    const odishaLocations = {
-                    'Bhubaneswar': [20.2961, 85.8245],
-                    'Cuttack': [20.4625, 85.8828],
-                    'Rourkela': [22.2604, 84.8536],
-                    'Berhampur': [19.3140, 84.7941],
-                    'Sambalpur': [21.4669, 83.9757],
-                    'Puri': [19.8134, 85.8315],
-                    'Balasore': [21.4940, 86.9427],
-                    'Bargarh': [21.3353, 83.6161],
-                    'Angul': [20.8442, 85.1511],
-                    'Jharsuguda': [21.8553, 84.0062],
-                    'Dhenkanal': [20.6587, 85.5980],
-                    'Kendrapara': [20.5002, 86.4166],
-                    'Jagatsinghpur': [20.2548, 86.1706],
-                    'Koraput': [18.8110, 82.7105],
-                    'Rayagada': [19.1711, 83.4160],
-                    'Bolangir': [20.7074, 83.4843],
-                    'Sundargarh': [22.1167, 84.0333],
-                    'Nayagarh': [20.1281, 85.0985],
-                    'Malkangiri': [18.3650, 82.1367],
-                    'Khordha': [20.1883, 85.6214],
-                    
-                };
-                    const [latitude, longitude] = odishaLocations[location];
+                // Get recipient coordinates
+                const [latitude, longitude] = odishaLocations[location];
+                console.log(`Recipient coordinates: [${latitude}, ${longitude}]`);
 
-                    // Add recipient marker
-                    L.marker([latitude, longitude], {
-                        icon: L.icon({
-                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-                            iconSize: [25, 41],
-                            iconAnchor: [12, 41]
-                        })
-                    }).addTo(map)
-                        .bindPopup('Recipient').openPopup();
+                // Collect bounds for map fitting
+                const bounds = [[latitude, longitude]];
 
-                    // Display matches
+                // Add recipient marker (red)
+                const recipientMarker = L.marker([latitude, longitude], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41]
+                    })
+                }).addTo(map)
+                    .bindPopup('Recipient');
+                recipientMarker.openPopup();
+
+                // Process matches and add donor markers (green)
+                if (matchData.status === 'success' && matchData.matches.length > 0) {
                     let results = `<div class="grid gap-6">`;
-                    data.matches.forEach(match => {
+                    matchData.matches.forEach(match => {
+                        // Validate donor coordinates
+                        if (isNaN(match.donor_latitude) || isNaN(match.donor_longitude)) {
+                            console.warn(`Invalid donor coordinates for Donor ${match.donor_id}: [${match.donor_latitude}, ${match.donor_longitude}]`);
+                            return;
+                        }
+                        console.log(`Donor ${match.donor_id} coordinates: [${match.donor_latitude}, ${match.donor_longitude}]`);
                         const hospitalDistance = match.hospital_distance === null ? 'No low-stock hospitals' : `${match.hospital_distance.toFixed(2)} km`;
                         results += `
                             <div class="bg-white p-6 rounded-xl shadow-lg card">
@@ -324,13 +347,20 @@
                                 <p class="text-gray-600"><strong>Distance to Hospital:</strong> ${hospitalDistance}</p>
                                 <p class="text-gray-600"><strong>Urgency:</strong> ${match.urgency_score}</p>
                                 <p class="text-gray-600"><strong>AI Match Score:</strong> ${(match.match_quality * 100).toFixed(2)}%</p>
-                                <p class="text-gray-600"><strong>SMS Status:</strong> ${data.sms_status}</p>
+                                <p class="text-gray-600"><strong>SMS Status:</strong> ${matchData.sms_status}</p>
                                 <p class="text-gray-600"><strong>Contact:</strong> <span id="phone-${match.donor_id}">${match.masked_phone}</span></p>
                                 <button class="mt-3 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 btn contact-btn" data-token="${match.contact_token}" data-donor-id="${match.donor_id}" ${match.masked_phone === 'Unknown' ? 'disabled' : ''}>Contact Donor</button>
                             </div>`;
-                        // Add donor marker
-                        L.marker([match.donor_latitude, match.donor_longitude]).addTo(map)
+                        // Add donor marker (default green)
+                        L.marker([match.donor_latitude, match.donor_longitude], {
+                            icon: L.icon({
+                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+                                iconSize: [25, 41],
+                                iconAnchor: [12, 41]
+                            })
+                        }).addTo(map)
                             .bindPopup(`Donor ${match.donor_id}: ${match.blood_type}`);
+                        bounds.push([match.donor_latitude, match.donor_longitude]);
                     });
                     results += `</div>`;
                     resultsDiv.innerHTML = results;
@@ -393,19 +423,16 @@
 
                     // Show SMS status toast
                     Toastify({
-                        text: `SMS Status: ${data.sms_status}`,
+                        text: `SMS Status: ${matchData.sms_status}`,
                         duration: 5000,
                         gravity: "top",
                         position: "right",
                         style: {
-                            background: data.sms_status === "sent" ? "#10b981" : "#ef4444",
+                            background: matchData.sms_status === "sent" ? "#10b981" : "#ef4444",
                             borderRadius: "8px",
                             fontSize: "16px"
                         }
                     }).showToast();
-
-                    // Adjust map view
-                    map.setView([latitude, longitude], 10);
                 } else {
                     resultsDiv.innerHTML = `<div class="bg-white p-6 rounded-lg shadow-md"><p class="text-red-500 font-medium">No donors found. Try a different location or blood type.</p></div>`;
                     Toastify({
@@ -416,7 +443,39 @@
                         style: { background: "#ef4444", borderRadius: "8px", fontSize: "16px" }
                     }).showToast();
                 }
+
+                // Add hospital markers (blue)
+                if (hospitalData.status === 'success' && hospitalData.hospitals.length > 0) {
+                    hospitalData.hospitals.forEach(hospital => {
+                        // Validate hospital coordinates
+                        if (isNaN(hospital.latitude) || isNaN(hospital.longitude)) {
+                            console.warn(`Invalid hospital coordinates for ${hospital.name}: [${hospital.latitude}, ${hospital.longitude}]`);
+                            return;
+                        }
+                        console.log(`Hospital ${hospital.name} coordinates: [${hospital.latitude}, ${hospital.longitude}]`);
+                        L.marker([hospital.latitude, hospital.longitude], {
+                            icon: L.icon({
+                                iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+                                iconSize: [25, 41],
+                                iconAnchor: [12, 41]
+                            })
+                        }).addTo(map)
+                            .bindPopup(`${hospital.name}`);
+                        bounds.push([hospital.latitude, hospital.longitude]);
+                    });
+                } else {
+                    console.warn('No hospitals found or hospital data fetch failed.');
+                }
+
+                // Fit map to bounds if there are multiple points
+                if (bounds.length > 1) {
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                } else {
+                    map.setView([latitude, longitude], 10);
+                }
+
             } catch (error) {
+                console.error('Error during form submission:', error);
                 resultsDiv.innerHTML = `<div class="bg-white p-6 rounded-lg shadow-md"><p class="text-red-500 font-medium">Error: ${error.message}</p></div>`;
                 Toastify({
                     text: `Error: ${error.message}`,
@@ -425,7 +484,6 @@
                     position: "right",
                     style: { background: "#ef4444", borderRadius: "8px", fontSize: "16px" }
                 }).showToast();
-                console.error('Fetch error:', error);
             } finally {
                 spinner.style.display = 'none';
             }
