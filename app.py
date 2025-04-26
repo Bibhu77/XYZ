@@ -5,9 +5,11 @@ from matching import match_donor, load_data
 from twilio.rest import Client
 import math
 import logging
+import secrets
+import time
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow all origins for testing
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -51,12 +53,33 @@ ODISHA_LOCATIONS = {
     'Khordha': (20.1883, 85.6214)
 }
 
+# Temporary storage for phone reveal tokens (in-memory, use Redis in production)
+phone_tokens = {}
+
+def mask_phone(phone):
+    """Mask a phone number, showing only the last 4 digits."""
+    try:
+        # Convert to string and remove any non-digit characters
+        phone_str = str(phone).replace('+', '').replace('-', '').replace(' ', '')
+        if not phone_str or len(phone_str) < 4:
+            return "Unknown"
+        return f"XXXX-XXX-{phone_str[-4:]}"
+    except Exception as e:
+        logging.error(f"Error masking phone number {phone}: {str(e)}")
+        return "Unknown"
+
 @app.route('/match', methods=['POST'])
 def match():
     """API endpoint to match donors to a recipient using AI."""
     try:
         # Get recipient data from the request
         data = request.json
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'message': 'No data provided in request.'
+            }), 400
+        
         location = data.get('location')
         if location not in ODISHA_LOCATIONS:
             return jsonify({
@@ -65,22 +88,65 @@ def match():
             }), 400
         
         latitude, longitude = ODISHA_LOCATIONS[location]
+        try:
+            urgency = int(data.get('urgency', 0))
+        except (ValueError, TypeError):
+            return jsonify({
+                'status': 'error',
+                'message': 'Urgency must be an integer between 1 and 10.'
+            }), 400
+        
         recipient = {
-            'blood_type': data['blood_type'],
+            'blood_type': data.get('blood_type'),
             'latitude': latitude,
             'longitude': longitude,
-            'urgency': int(data['urgency'])
+            'urgency': urgency
         }
+        
+        # Validate recipient data
+        if not recipient['blood_type'] or recipient['blood_type'] not in ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+']:
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid blood type.'
+            }), 400
+        if urgency < 1 or urgency > 10:
+            return jsonify({
+                'status': 'error',
+                'message': 'Urgency must be between 1 and 10.'
+            }), 400
         
         logging.debug(f"Recipient data: {recipient}")
         
         # Find matches using AI model
         matches = match_donor(recipient, donors, hospitals)
         
-        # Process matches to handle Infinity
+        # Process matches to handle Infinity and add masked phone
         for match in matches:
             if math.isinf(match['hospital_distance']) or match['hospital_distance'] > 1000:
-                match['hospital_distance'] = None  # or "No low-stock hospitals"
+                match['hospital_distance'] = None
+            try:
+                match['masked_phone'] = mask_phone(match.get('phone'))
+            except Exception as e:
+                logging.error(f"Error masking phone for donor {match['donor_id']}: {str(e)}")
+                match['masked_phone'] = "Unknown"
+            # Generate a one-time token for revealing the phone
+            token = secrets.token_hex(16)
+            phone_tokens[token] = {
+                'phone': match.get('phone', 'Unknown'),
+                'expires': time.time() + 300  # 5 minutes
+            }
+            match['contact_token'] = token
+        
+        # Find the closest hospital for SMS
+        closest_hospital = None
+        min_distance = float('inf')
+        for _, hospital in hospitals.iterrows():
+            hospital_loc = (hospital['latitude'], hospital['longitude'])
+            recipient_loc = (recipient['latitude'], recipient['longitude'])
+            distance = haversine(hospital_loc, recipient_loc)
+            if distance < min_distance:
+                min_distance = distance
+                closest_hospital = hospital
         
         # Send SMS to the closest donor (if any)
         sms_status = "not_attempted"
@@ -92,7 +158,8 @@ def match():
                 sms_status = "failed: To and From numbers cannot be the same"
                 logging.error(sms_status)
             else:
-                message = f"Urgent: {recipient['blood_type']} blood needed in {location}. Please contact the hospital."
+                hospital_contact = closest_hospital['name'] if closest_hospital is not None else "local hospital"
+                message = f"Urgent: {recipient['blood_type']} blood needed in {location}. Please contact {hospital_contact} at +919876543210."
                 try:
                     twilio_client.messages.create(
                         body=message,
@@ -115,8 +182,49 @@ def match():
         logging.error(f"Error in /match endpoint: {str(e)}")
         return jsonify({
             'status': 'error',
+            'message': f"Server error: {str(e)}"
+        }), 500
+
+@app.route('/reveal_phone', methods=['POST'])
+def reveal_phone():
+    """Reveal the full phone number using a one-time token."""
+    try:
+        data = request.json
+        token = data.get('token')
+        if not token or token not in phone_tokens:
+            return jsonify({
+                'status': 'error',
+                'message': 'Invalid or expired token.'
+            }), 400
+        
+        token_data = phone_tokens[token]
+        if time.time() > token_data['expires']:
+            del phone_tokens[token]
+            return jsonify({
+                'status': 'error',
+                'message': 'Token has expired.'
+            }), 400
+        
+        phone = token_data['phone']
+        # Delete the token after use
+        del phone_tokens[token]
+        
+        return jsonify({
+            'status': 'success',
+            'phone': phone
+        })
+    
+    except Exception as e:
+        logging.error(f"Error in /reveal_phone endpoint: {str(e)}")
+        return jsonify({
+            'status': 'error',
             'message': str(e)
         }), 400
+
+def haversine(loc1, loc2):
+    """Calculate distance between two locations using Haversine formula."""
+    from haversine import haversine
+    return haversine(loc1, loc2)
 
 if __name__ == "__main__":
     app.run(debug=True, host='0.0.0.0', port=5000)
